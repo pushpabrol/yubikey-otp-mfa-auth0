@@ -8,6 +8,7 @@ import bodyParser from 'body-parser';
 import request from 'request';
 import qs from 'qs';
 import jwt from 'jsonwebtoken';
+import { without, findWhere } from 'underscore';
 const app = express();
 const AUDIENCE = "yubikeyOTPWithSelfRegistration";
 
@@ -29,6 +30,11 @@ app.post('/', (req, res) => {
 
     jwt.verify(req.body.token, new Buffer(req.webtaskContext.secrets.token_signing_shared_secret, 'base64'), (err, decoded) => {
         if (err) renderOtpView(decoded, req.body.token, req.body.state, res, [err]);
+        getOtherUsersUsingKey(decoded.sub,req.body.otp.substring(0, 12),req.webtaskContext,(error,users) =>  {
+
+         if(users.length > 0 )   renderOtpView(decoded, req.body.token, req.body.state, res, [new Error("Yubikey already in use. Your account allows use and registration of upto " + req.webtaskContext.secrets.allowed_yubikeys_per_user + " unique yubikey(s). You can not use a Yubikey being used by another user. Please contact support if you think this Yubikey is yours!")]);
+         else {
+          
         getUserById(decoded.sub, req.webtaskContext, (error, user) => {
             if (error) renderOtpView(decoded, req.body.token, req.body.state, res, [error]);
 
@@ -105,6 +111,8 @@ app.post('/', (req, res) => {
             }
 
         });
+    }
+        });
     });
 
 });
@@ -156,7 +164,7 @@ function renderOtpView(decoded, token, state, res, errors) {
         'Content-Type': 'text/html'
     });
     res.end(require('ejs').render(otpForm.toString().match(/[^]*\/\*([^]*)\*\/\s*\}$/)[1], {
-        user: decoded.email,
+        user: (decoded && decoded.email) || "",
         errors: errors || [],
         token: token,
         state: state
@@ -277,5 +285,32 @@ var getUserById = (userid, webtaskContext, cb) => {
             console.log(error);
             cb(error);
         });
+
+}
+
+var getOtherUsersUsingKey = (userId,key,webtaskContext,cb) => {
+  
+   var tools = require('auth0-extension-tools');
+   var _ = require("underscore");
+    tools.managementApi.getClient({
+            domain: webtaskContext.secrets.auth0_domain,
+            clientId: webtaskContext.secrets.management_api_client_id,
+            clientSecret: webtaskContext.secrets.management_api_client_secret
+        })
+        .then(function(client) {
+            client.getUsers({q: 'app_metadata.ybPublicIds:"' + key + '"'}).then((users) => {
+
+              users = without(users, findWhere(users, {
+                user_id: userId
+              }));
+               cb(null, users)
+            })
+        }).catch(function(error) {
+            console.log(error);
+            cb(error);
+        });
+  
+  
+
 
 }
