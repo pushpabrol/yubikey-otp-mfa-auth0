@@ -8,7 +8,7 @@ function (user, context, callback) {
           AUDIENCE: 'yubikeyOTPWithSelfRegistration',
           TOKEN_SIGNING_SECRET: configuration.YBMFA_TOKEN_SIGNING_SECRET,
           ISSUER: auth0.domain,
-          WT_URL: configuration.YBMFA_WT_URL
+          WT_URL: configuration.WT_URL
       };
       var token;
           //Returning from OTP validation
