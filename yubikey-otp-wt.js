@@ -19,9 +19,9 @@ app.use(bodyParser.urlencoded({
 
 app.get('/', (req, res) => {
     jwt.verify(req.query.token, new Buffer(req.webtaskContext.secrets.token_signing_shared_secret, 'base64'), (err, decoded) => {
-        if (err) renderOtpView(decoded, req.query.token, req.query.state, res, [err]);
-        renderOtpView(decoded, req.query.token, req.query.state, res, null);
-    });
+    if (err) renderOtpView(decoded, req.query.token, req.query.state, res, [err]);
+renderOtpView(decoded, req.query.token, req.query.state, res, null);
+});
 });
 
 app.post('/', (req, res) => {
@@ -29,86 +29,87 @@ app.post('/', (req, res) => {
     //check otp vs registered for user and register if less than 2 exist
 
     jwt.verify(req.body.token, new Buffer(req.webtaskContext.secrets.token_signing_shared_secret, 'base64'), (err, decoded) => {
-        if (err) renderOtpView(decoded, req.body.token, req.body.state, res, [err]);
-        getOtherUsersUsingKey(decoded.sub,req.body.otp.substring(0, 12),req.webtaskContext,(error,users) =>  {
+    if (err) renderOtpView(decoded, req.body.token, req.body.state, res, [err]);
+getOtherUsersUsingKey(decoded.sub,req.body.otp.substring(0, 12),req.webtaskContext,(error,users) =>  {
 
-         if(users.length > 0 )   renderOtpView(decoded, req.body.token, req.body.state, res, [new Error("Yubikey already in use. Your account allows use and registration of upto " + req.webtaskContext.secrets.allowed_yubikeys_per_user + " unique yubikey(s). You can not use a Yubikey being used by another user. Please contact support if you think this Yubikey is yours!")]);
-         else {
-          
-        getUserById(decoded.sub, req.webtaskContext, (error, user) => {
-            if (error) renderOtpView(decoded, req.body.token, req.body.state, res, [error]);
+    if(users.length > 0 )   renderOtpView(decoded, req.body.token, req.body.state, res, [new Error("Yubikey already in use. Your account allows use and registration of upto " + req.webtaskContext.secrets.allowed_yubikeys_per_user + " unique yubikey(s). You can not use a Yubikey being used by another user. Please contact support if you think this Yubikey is yours!")]);
+else {
 
-            user.app_metadata = user.app_metadata || [];
-            user.app_metadata.ybPublicIds = user.app_metadata.ybPublicIds || [];
-            if (user.app_metadata.ybPublicIds.length >= req.webtaskContext.secrets.allowed_yubikeys_per_user) {
-                //check for match
-                if (user.app_metadata.ybPublicIds.indexOf(req.body.otp.substring(0, 12)) > -1) {
-                    yubico_validate(req.webtaskContext.secrets.yubikey_clientid, req.body.otp, function(err, resp) {
-                        if (err) {
-                            renderOtpView(decoded, req.body.token, req.body.state, res, [err]);
-                        }
-                        if (resp.status === 'OK') {
-                            var token = jwt.sign({
-                                    status: resp.status
-                                },
-                                new Buffer(req.webtaskContext.secrets.token_signing_shared_secret, 'base64'), {
-                                    subject: decoded.sub,
-                                    expiresIn: 60,
-                                    audience: AUDIENCE,
-                                    issuer: req.webtaskContext.secrets.auth0_domain
-                                });
-                            res.writeHead(301, {
-                                Location: req.webtaskContext.secrets.returnUrl + "?token=" + token + "&state=" + req.query.state
-                            });
-                            res.end();
-                        } else {
-                            return renderOtpView(decoded, req.body.token, req.body.state, res, [resp.status]);
+    getUserById(decoded.sub, req.webtaskContext, (error, user) => {
+        if (error) renderOtpView(decoded, req.body.token, req.body.state, res, [error]);
 
-
-                        }
+    user.app_metadata = user.app_metadata || [];
+    user.app_metadata.ybPublicIds = user.app_metadata.ybPublicIds || [];
+    if (user.app_metadata.ybPublicIds.length >= req.webtaskContext.secrets.allowed_yubikeys_per_user) {
+        //check for match
+        if (user.app_metadata.ybPublicIds.indexOf(req.body.otp.substring(0, 12)) > -1) {
+            yubico_validate(req.webtaskContext.secrets.yubikey_clientid, req.body.otp, function(err, resp) {
+                if (err) {
+                    renderOtpView(decoded, req.body.token, req.body.state, res, [err]);
+                }
+                if (resp.status === 'OK') {
+                    var token = jwt.sign({
+                            status: resp.status
+                        },
+                        new Buffer(req.webtaskContext.secrets.token_signing_shared_secret, 'base64'), {
+                            subject: decoded.sub,
+                            expiresIn: 60,
+                            audience: AUDIENCE,
+                            issuer: req.webtaskContext.secrets.auth0_domain
+                        });
+                    res.writeHead(301, {
+                        Location: req.webtaskContext.secrets.returnUrl + "?token=" + token + "&state=" + req.query.state
                     });
-                } else renderOtpView(decoded, req.body.token, req.body.state, res, [new Error("Not a registered Yubikey. Your account allows use and registration of upto " + req.webtaskContext.secrets.allowed_yubikeys_per_user + " yubikey(s). Please contact support if you want to register this Yubikey!")]);
-            } else {
-
-                yubico_validate(req.webtaskContext.secrets.yubikey_clientid, req.body.otp, function(err, resp) {
-                    if (err) renderOtpView(decoded, req.body.token, req.body.state, res, [err]);
-                    if (resp.status === 'OK') {
-
-                        var token = jwt.sign({
-                                status: resp.status
-                            },
-                            new Buffer(req.webtaskContext.secrets.token_signing_shared_secret, 'base64'), {
-                                subject: decoded.sub,
-                                expiresIn: 60,
-                                audience: AUDIENCE,
-                                issuer: req.webtaskContext.secrets.auth0_domain
-                            });
-                        if (user.app_metadata.ybPublicIds.indexOf(req.body.otp.substring(0, 12)) < 0) {
-                            user.app_metadata.ybPublicIds[user.app_metadata.ybPublicIds.length] = req.body.otp.substring(0, 12);
-
-                            updateUserAppMetadata(decoded.sub, user.app_metadata, req.webtaskContext, (error, updatedUser) => {
-                                if (error) renderOtpView(decoded, req.body.token, req.body.state, res, [new Error("Error while registering the Yubikey Public ID. Please try to login again!")]);
-
-                                res.writeHead(301, {
-                                    Location: req.webtaskContext.secrets.returnUrl + "?token=" + token + "&state=" + req.query.state
-                                });
-                                res.end();
-                            });
-                        } else {
-                            res.writeHead(301, {
-                                Location: req.webtaskContext.secrets.returnUrl + "?token=" + token + "&state=" + req.query.state
-                            });
-                            res.end();
+                    res.end();
+                } else {
+                    return renderOtpView(decoded, req.body.token, req.body.state, res, [resp.status]);
 
 
-                        }
+                }
+            });
+        } else renderOtpView(decoded, req.body.token, req.body.state, res, [new Error("Not a registered Yubikey. Your account allows use and registration of upto " + req.webtaskContext.secrets.allowed_yubikeys_per_user + " yubikey(s). Please contact support if you want to register this Yubikey!")]);
+    } else {
 
+        yubico_validate(req.webtaskContext.secrets.yubikey_clientid, req.body.otp, function(err, resp) {
+            if (err) renderOtpView(decoded, req.body.token, req.body.state, res, [err]);
+            if (resp.status === 'OK') {
 
-                    } else return renderOtpView(decoded, req.body.token, req.body.state, res, [resp.status]);
+                var token = jwt.sign({
+                        status: resp.status
+                    },
+                    new Buffer(req.webtaskContext.secrets.token_signing_shared_secret, 'base64'), {
+                        subject: decoded.sub,
+                        expiresIn: 60,
+                        audience: AUDIENCE,
+                        issuer: req.webtaskContext.secrets.auth0_domain
+                    });
+                if (user.app_metadata.ybPublicIds.indexOf(req.body.otp.substring(0, 12)) < 0) {
+                    user.app_metadata.ybPublicIds[user.app_metadata.ybPublicIds.length] = req.body.otp.substring(0, 12);
+                    var metadata = { ybPublicIds: req.body.otp.substring(0, 12)}
 
+                    updateUserAppMetadata(decoded.sub, metadata, req.webtaskContext, (error, updatedUser) => {
+                        if (error) renderOtpView(decoded, req.body.token, req.body.state, res, [new Error("Error while registering the Yubikey Public ID. Please try to login again!")]);
+
+                    res.writeHead(301, {
+                        Location: req.webtaskContext.secrets.returnUrl + "?token=" + token + "&state=" + req.query.state
+                    });
+                    res.end();
                 });
+                } else {
+                    res.writeHead(301, {
+                        Location: req.webtaskContext.secrets.returnUrl + "?token=" + token + "&state=" + req.query.state
+                    });
+                    res.end();
 
-            }
+
+                }
+
+
+            } else return renderOtpView(decoded, req.body.token, req.body.state, res, [resp.status]);
+
+        });
+
+    }
 
         });
     }
@@ -233,10 +234,10 @@ function otpForm() {
 var updateUserAppMetadata = (userid, data, webtaskContext, cb) => {
     var tools = require('auth0-extension-tools');
     tools.managementApi.getClient({
-            domain: webtaskContext.secrets.auth0_domain,
-            clientId: webtaskContext.secrets.management_api_client_id,
-            clientSecret: webtaskContext.secrets.management_api_client_secret
-        })
+        domain: webtaskContext.secrets.auth0_domain,
+        clientId: webtaskContext.secrets.management_api_client_id,
+        clientSecret: webtaskContext.secrets.management_api_client_secret
+    })
         .then(function(client) {
 
             client.users.updateAppMetadata({
@@ -249,23 +250,23 @@ var updateUserAppMetadata = (userid, data, webtaskContext, cb) => {
                 } else {
 
                     cb(null, user);
-                }
+        }
 
-            })
+        })
         }).catch(function(error) {
-            console.log(error);
-            cb(error);
-        });
+        console.log(error);
+        cb(error);
+    });
 
 }
 
 var getUserById = (userid, webtaskContext, cb) => {
     var tools = require('auth0-extension-tools');
     tools.managementApi.getClient({
-            domain: webtaskContext.secrets.auth0_domain,
-            clientId: webtaskContext.secrets.management_api_client_id,
-            clientSecret: webtaskContext.secrets.management_api_client_secret
-        })
+        domain: webtaskContext.secrets.auth0_domain,
+        clientId: webtaskContext.secrets.management_api_client_id,
+        clientSecret: webtaskContext.secrets.management_api_client_secret
+    })
         .then(function(client) {
 
             client.users.get({
@@ -278,39 +279,39 @@ var getUserById = (userid, webtaskContext, cb) => {
                 } else {
 
                     cb(null, user);
-                }
+        }
 
-            })
+        })
         }).catch(function(error) {
-            console.log(error);
-            cb(error);
-        });
+        console.log(error);
+        cb(error);
+    });
 
 }
 
 var getOtherUsersUsingKey = (userId,key,webtaskContext,cb) => {
-  
-   var tools = require('auth0-extension-tools');
-   var _ = require("underscore");
+
+    var tools = require('auth0-extension-tools');
+    var _ = require("underscore");
     tools.managementApi.getClient({
-            domain: webtaskContext.secrets.auth0_domain,
-            clientId: webtaskContext.secrets.management_api_client_id,
-            clientSecret: webtaskContext.secrets.management_api_client_secret
-        })
+        domain: webtaskContext.secrets.auth0_domain,
+        clientId: webtaskContext.secrets.management_api_client_id,
+        clientSecret: webtaskContext.secrets.management_api_client_secret
+    })
         .then(function(client) {
             client.getUsers({q: 'app_metadata.ybPublicIds:"' + key + '"'}).then((users) => {
 
-              users = without(users, findWhere(users, {
-                user_id: userId
-              }));
-               cb(null, users)
-            })
+                users = without(users, findWhere(users, {
+                    user_id: userId
+                }));
+            cb(null, users)
+        })
         }).catch(function(error) {
-            console.log(error);
-            cb(error);
-        });
-  
-  
+        console.log(error);
+        cb(error);
+    });
+
+
 
 
 }
