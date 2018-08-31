@@ -1,6 +1,6 @@
 function (user, context, callback) {
     console.log(auth0);
-      if(context.clientID === 'jb7TlXAC62pZx71EeJ6CF74EJUy6b1LG')
+      if(context.clientID === 'client_id' && context.connection === 'name of your connection')
       {
       var timeDiff = 14 * 24 * 60 * 60 * 1000;
       var _ = require('lodash');
